@@ -3,6 +3,7 @@ pub mod visualizer;
 
 use std::{
     io::{self, Stdout},
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -14,12 +15,21 @@ use crossterm::{
 };
 use ratatui::prelude::*;
 
-use self::visualizer::LayoutWidget;
+use self::{
+    audio_capture::{capture_device_ouput, get_default_audio_output_device, U8RmsProcessor, get_output_audio_devices},
+    visualizer::LayoutWidget,
+};
 
 fn main() -> Result<()> {
-    let mut terminal = setup_terminal().context("setup failed")?;
+    let device = get_default_audio_output_device().unwrap();
+    let processor = Arc::new(Mutex::new(U8RmsProcessor::new()));
+    let stream = capture_device_ouput(&device, processor).unwrap();
+    /* let mut terminal = setup_terminal().context("setup failed")?;
     run(&mut terminal).context("app loop failed")?;
-    restore_terminal(&mut terminal).context("restore terminal failed")?;
+    restore_terminal(&mut terminal).context("restore terminal failed")?; */
+    let ten_millis = std::time::Duration::from_millis(5000);
+
+    std::thread::sleep(ten_millis);
     Ok(())
 }
 
