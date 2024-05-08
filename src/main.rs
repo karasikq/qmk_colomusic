@@ -16,22 +16,19 @@ use crossterm::{
 use ratatui::prelude::*;
 
 use self::{
-    audio_capture::{
-        capture_device_ouput, get_default_audio_output_device, 
-        RmsProcessor,
-    },
+    audio_capture::{capture_device_ouput, get_default_audio_output_device, RmsProcessor},
     visualizer::{LayoutWidget, VUMeterEmulator},
 };
 
 fn main() -> Result<()> {
     let device = get_default_audio_output_device().unwrap();
     let processor = Arc::new(Mutex::new(RmsProcessor::new()));
-    let _ = capture_device_ouput(&device, processor.clone()).unwrap();
+    let _stream = capture_device_ouput(&device, processor.clone()).unwrap();
     let mut terminal = setup_terminal().context("setup failed")?;
     run(&mut terminal, processor.clone()).context("app loop failed")?;
     restore_terminal(&mut terminal).context("restore terminal failed")?;
 
-    // std::thread::sleep(ten_millis);
+    // std::thread::sleep(Duration::from_millis(10000));
     Ok(())
 }
 
@@ -57,18 +54,8 @@ fn run(
     let mut vu_emulator = VUMeterEmulator::default();
     loop {
         terminal.draw(|f| {
-            let processor = p.lock().unwrap();
-            let rms = processor.get_rms::<f32>();
-            let output = vu_emulator.process(rms);
-            let vu =
-                VUMeterEmulator::map(output.0, 0.0f32, vu_emulator.max(), 0.0f32, 84.0f32) as usize;
-            for (index, color) in layout.colors.iter_mut().enumerate() {
-                if index < vu {
-                    *color = ratatui::style::Color::Rgb(255, 0, 0);
-                } else {
-                    *color = ratatui::style::Color::Rgb(32, 0, 0);
-                }
-            }
+            let rms = { p.lock().unwrap().get_rms::<f32>() };
+            vu_emulator.process(rms, &mut layout.colors);
             let widget = LayoutWidget { layout: &layout };
             f.render_widget(widget, f.size());
         })?;

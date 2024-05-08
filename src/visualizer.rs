@@ -7,8 +7,14 @@
 ⣿ ⣿ ⣿         ⣿    ⣿ ⣿ ⣿ ⣿ ⣿  ⣿
 */
 
+use ratatui::{
+    buffer::Buffer,
+    layout::*,
+    style::{Color, Style},
+    text::Line,
+    widgets::Widget,
+};
 use std::fmt::Display;
-use ratatui::{buffer::Buffer, layout::*, style::Style, text::Line, widgets::Widget};
 
 #[derive(Copy, Clone)]
 enum Key {
@@ -122,6 +128,7 @@ pub struct VUMeterEmulator {
     last_rms: (f32, f32),
     average_level: f32,
     max_level: f32,
+    h: f32,
 }
 
 impl VUMeterEmulator {
@@ -133,17 +140,36 @@ impl VUMeterEmulator {
             last_rms: (0f32, 0f32),
             average_level: 0f32,
             max_level: 0f32,
+            h: 0.0,
         }
     }
 
-    pub fn process(&mut self, rms: (f32, f32)) -> (f32, f32) {
+    pub fn process(&mut self, rms: (f32, f32), colors: &mut [Color]) {
+        self.h += 0.05f32;
+        if self.h > 1.0f32 {
+            self.h = 0.0f32;
+        }
         self.last_rms.0 = rms.0 * self.smooth - self.last_rms.0 * (1.0f32 - self.smooth);
         self.last_rms.1 = rms.1 * self.smooth - self.last_rms.1 * (1.0f32 - self.smooth);
         self.average_level = (self.last_rms.0 + self.last_rms.1) / 2.0f32
             * self.average_attenuation
             + self.average_level * (1.0f32 - self.average_attenuation);
         self.max_level = self.average_level * self.average_gain;
-        self.last_rms
+
+        let vu = Self::map(
+            self.last_rms.0,
+            0.0f32,
+            self.max_level,
+            0.0f32,
+            colors.len() as f32,
+        ) as usize;
+        for (index, color) in colors.iter_mut().enumerate() {
+            if index < vu {
+                *color = to_rgb(self.h, 1.0f32, 1.0f32);
+            } else {
+                *color = Color::Rgb(32, 0, 0);
+            }
+        }
     }
 
     pub fn max(&self) -> f32 {
@@ -163,4 +189,24 @@ impl Default for VUMeterEmulator {
     fn default() -> Self {
         Self::new(0.3f32, 1.6f32, 0.009f32)
     }
+}
+
+fn to_rgb(h: f32, s: f32, v: f32) -> Color {
+    let range = (h / 60.0) as u8;
+    let c = v * s;
+    let x = c * (1.0 - (((h / 60.0) % 2.0) - 1.0).abs());
+    let m = v - c;
+
+    match range {
+        0 => f32_rgb_to_color((c + m) * 255.0, (x + m) * 255.0, m * 255.0),
+        1 => f32_rgb_to_color((x + m) * 255.0, (c + m) * 255.0, m * 255.0),
+        2 => f32_rgb_to_color(m * 255.0, (c + m) * 255.0, (x + m) * 255.0),
+        3 => f32_rgb_to_color(m * 255.0, (x + m) * 255.0, (c + m) * 255.0),
+        4 => f32_rgb_to_color((x + m) * 255.0, m * 255.0, (c + m) * 255.0),
+        _ => f32_rgb_to_color((c + m) * 255.0, m * 255.0, (x + m) * 255.0),
+    }
+}
+
+fn f32_rgb_to_color(r: f32, g: f32, b: f32) -> Color {
+    Color::Rgb(r as u8, g as u8, b as u8)
 }
