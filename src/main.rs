@@ -16,20 +16,22 @@ use crossterm::{
 use ratatui::prelude::*;
 
 use self::{
-    audio_capture::{capture_device_ouput, get_default_audio_output_device, U8RmsProcessor, get_output_audio_devices},
-    visualizer::LayoutWidget,
+    audio_capture::{
+        capture_device_ouput, get_default_audio_output_device, 
+        RmsProcessor,
+    },
+    visualizer::{LayoutWidget, VUMeterEmulator},
 };
 
 fn main() -> Result<()> {
     let device = get_default_audio_output_device().unwrap();
-    let processor = Arc::new(Mutex::new(U8RmsProcessor::new()));
-    let stream = capture_device_ouput(&device, processor).unwrap();
-    /* let mut terminal = setup_terminal().context("setup failed")?;
-    run(&mut terminal).context("app loop failed")?;
-    restore_terminal(&mut terminal).context("restore terminal failed")?; */
-    let ten_millis = std::time::Duration::from_millis(5000);
+    let processor = Arc::new(Mutex::new(RmsProcessor::new()));
+    let _ = capture_device_ouput(&device, processor.clone()).unwrap();
+    let mut terminal = setup_terminal().context("setup failed")?;
+    run(&mut terminal, processor.clone()).context("app loop failed")?;
+    restore_terminal(&mut terminal).context("restore terminal failed")?;
 
-    std::thread::sleep(ten_millis);
+    // std::thread::sleep(ten_millis);
     Ok(())
 }
 
@@ -47,10 +49,26 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
     terminal.show_cursor().context("unable to show cursor")
 }
 
-fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
-    let layout = visualizer::Layout::default();
+fn run(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    p: Arc<Mutex<RmsProcessor>>,
+) -> Result<()> {
+    let mut layout = visualizer::Layout::default();
+    let mut vu_emulator = VUMeterEmulator::default();
     loop {
         terminal.draw(|f| {
+            let processor = p.lock().unwrap();
+            let rms = processor.get_rms::<f32>();
+            let output = vu_emulator.process(rms);
+            let vu =
+                VUMeterEmulator::map(output.0, 0.0f32, vu_emulator.max(), 0.0f32, 84.0f32) as usize;
+            for (index, color) in layout.colors.iter_mut().enumerate() {
+                if index < vu {
+                    *color = ratatui::style::Color::Rgb(255, 0, 0);
+                } else {
+                    *color = ratatui::style::Color::Rgb(32, 0, 0);
+                }
+            }
             let widget = LayoutWidget { layout: &layout };
             f.render_widget(widget, f.size());
         })?;
