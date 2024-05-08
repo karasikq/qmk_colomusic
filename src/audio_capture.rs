@@ -147,7 +147,9 @@ impl Processor for RmsProcessor {
         self.rms.1 = (sum.1 / len_2).sqrt();
     }
 
-    fn process_error(&mut self, _err: StreamError) {}
+    fn process_error(&mut self, err: StreamError) {
+        println!("{}", err);
+    }
 
     fn timeout(&self) -> Option<Duration> {
         None
