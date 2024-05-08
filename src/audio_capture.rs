@@ -1,8 +1,7 @@
 use anyhow::Result;
 use cpal::{
     traits::{DeviceTrait, HostTrait},
-    Device, InputCallbackInfo, Sample, SizedSample,
-    StreamConfig, StreamError,
+    Device, InputCallbackInfo, Sample, SizedSample, StreamConfig, StreamError,
 };
 use dasp_sample::ToSample;
 use std::{
@@ -35,7 +34,14 @@ pub fn get_output_audio_devices() -> Vec<Device> {
 
 pub fn get_default_audio_output_device() -> Option<Device> {
     let default_host = cpal::default_host();
-    println!("{}", default_host.default_output_device().unwrap().name().unwrap());
+    println!(
+        "{}",
+        default_host
+            .default_output_device()
+            .unwrap()
+            .name()
+            .unwrap()
+    );
     default_host.default_output_device()
 }
 
@@ -101,30 +107,31 @@ where
     Ok(stream)
 }
 
-pub struct U8RmsProcessor {
+pub struct RmsProcessor {
     rms: (f32, f32),
 }
 
-impl U8RmsProcessor {
+impl RmsProcessor {
     pub fn new() -> Self {
-        Self {
-            rms: (0f32, 0f32),
-        }
+        Self { rms: (0f32, 0f32) }
     }
 
-    pub fn get_rms(&self) -> (u8, u8) {
-        (self.rms.0.to_sample::<u8>(), self.rms.0.to_sample::<u8>())
+    pub fn get_rms<T>(&self) -> (T, T)
+    where
+        T: cpal::FromSample<f32>,
+    {
+        (self.rms.0.to_sample::<T>(), self.rms.0.to_sample::<T>())
     }
 }
 
-impl Default for U8RmsProcessor {
+impl Default for RmsProcessor {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Processor for U8RmsProcessor {
-    fn process<S>(&mut self, data: &[S], info: &InputCallbackInfo, config: &StreamConfig)
+impl Processor for RmsProcessor {
+    fn process<S>(&mut self, data: &[S], _info: &InputCallbackInfo, _config: &StreamConfig)
     where
         S: SizedSample + ToSample<f32>,
     {
@@ -138,10 +145,9 @@ impl Processor for U8RmsProcessor {
         let len_2 = (data.len() / 2) as f32;
         self.rms.0 = (sum.0 / len_2).sqrt();
         self.rms.1 = (sum.1 / len_2).sqrt();
-        println!("{:?}", self.rms);
     }
 
-    fn process_error(&mut self, err: StreamError) {}
+    fn process_error(&mut self, _err: StreamError) {}
 
     fn timeout(&self) -> Option<Duration> {
         None
