@@ -145,10 +145,7 @@ impl VUMeterEmulator {
     }
 
     pub fn process(&mut self, rms: (f32, f32), colors: &mut [Color]) {
-        self.h += 0.05f32;
-        if self.h > 1.0f32 {
-            self.h = 0.0f32;
-        }
+        let hue_step: f32 = 360.0f32 / (colors.len() as f32);
         self.last_rms.0 = rms.0 * self.smooth - self.last_rms.0 * (1.0f32 - self.smooth);
         self.last_rms.1 = rms.1 * self.smooth - self.last_rms.1 * (1.0f32 - self.smooth);
         self.average_level = (self.last_rms.0 + self.last_rms.1) / 2.0f32
@@ -164,6 +161,10 @@ impl VUMeterEmulator {
             colors.len() as f32,
         ) as usize;
         for (index, color) in colors.iter_mut().enumerate() {
+            self.h += hue_step;
+            if self.h > 360.0f32 {
+                self.h = 0.0f32;
+            }
             if index < vu {
                 *color = to_rgb(self.h, 1.0f32, 1.0f32);
             } else {
@@ -187,7 +188,7 @@ impl VUMeterEmulator {
 
 impl Default for VUMeterEmulator {
     fn default() -> Self {
-        Self::new(0.3f32, 1.6f32, 0.009f32)
+        Self::new(0.03f32, 1.6f32, 0.01f32)
     }
 }
 
