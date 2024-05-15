@@ -1,5 +1,6 @@
 pub mod audio_capture;
 pub mod visualizer;
+pub mod protocol;
 
 use std::{
     io::{self, Stdout},
