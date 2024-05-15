@@ -5,9 +5,11 @@ use cpal::{
 };
 use dasp_sample::ToSample;
 use std::{
-    sync::{Arc, Mutex},
+    sync::{mpsc::Sender, Arc, Mutex},
     time::Duration,
 };
+
+use crate::protocol::ThreadCommand;
 
 pub trait Processor: Send + Sync {
     fn process<S>(&mut self, data: &[S], info: &InputCallbackInfo, config: &StreamConfig)
@@ -45,7 +47,11 @@ pub fn get_default_audio_output_device() -> Option<Device> {
     default_host.default_output_device()
 }
 
-pub fn capture_device_ouput<P>(device: &Device, processor: Arc<Mutex<P>>) -> Result<cpal::Stream>
+pub fn capture_device_ouput<P>(
+    device: &Device,
+    processor: Arc<Mutex<P>>,
+    tx: Sender<ThreadCommand>,
+) -> Result<cpal::Stream>
 where
     P: Processor + 'static,
 {
@@ -57,10 +63,11 @@ where
         cpal::SampleFormat::I8 => device.build_input_stream(
             &config,
             move |data, info| {
-                processor
-                    .lock()
-                    .unwrap()
-                    .process::<i8>(data, info, &move_config)
+                {
+                    let mut p = processor.lock().unwrap();
+                    p.process::<i8>(data, info, &move_config)
+                }
+                tx.send(ThreadCommand::ProcessorComplete).unwrap()
             },
             move |err| move_processor.lock().unwrap().process_error(err),
             None,
@@ -68,10 +75,11 @@ where
         cpal::SampleFormat::I16 => device.build_input_stream(
             &config,
             move |data, info| {
-                processor
-                    .lock()
-                    .unwrap()
-                    .process::<i16>(data, info, &move_config)
+                {
+                    let mut p = processor.lock().unwrap();
+                    p.process::<i16>(data, info, &move_config)
+                }
+                tx.send(ThreadCommand::ProcessorComplete).unwrap()
             },
             move |err| move_processor.lock().unwrap().process_error(err),
             None,
@@ -79,10 +87,11 @@ where
         cpal::SampleFormat::I32 => device.build_input_stream(
             &config,
             move |data, info| {
-                processor
-                    .lock()
-                    .unwrap()
-                    .process::<i32>(data, info, &move_config)
+                {
+                    let mut p = processor.lock().unwrap();
+                    p.process::<i32>(data, info, &move_config)
+                }
+                tx.send(ThreadCommand::ProcessorComplete).unwrap()
             },
             move |err| move_processor.lock().unwrap().process_error(err),
             None,
@@ -90,10 +99,15 @@ where
         cpal::SampleFormat::F32 => device.build_input_stream(
             &config,
             move |data, info| {
-                processor
-                    .lock()
-                    .unwrap()
-                    .process::<f32>(data, info, &move_config)
+                {
+                    let mut p = processor.lock().unwrap();
+                    p.process::<f32>(data, info, &move_config)
+                }
+                let send = tx.send(ThreadCommand::ProcessorComplete);
+                match send {
+                    Ok(_) => (),
+                    Err(err) => println!("Cannot send ProcessorComplete command. Reason: {err}"),
+                }
             },
             move |err| move_processor.lock().unwrap().process_error(err),
             None,

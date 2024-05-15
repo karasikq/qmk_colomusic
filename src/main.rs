@@ -1,10 +1,13 @@
 pub mod audio_capture;
-pub mod visualizer;
 pub mod protocol;
+pub mod visualizer;
 
 use std::{
     io::{self, Stdout},
-    sync::{Arc, Mutex},
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 
@@ -14,7 +17,10 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use hidapi::HidApi;
 use ratatui::prelude::*;
+
+use crate::protocol::{Protocol, ThreadCommand};
 
 use self::{
     audio_capture::{capture_device_ouput, get_default_audio_output_device, RmsProcessor},
@@ -22,14 +28,55 @@ use self::{
 };
 
 fn main() -> Result<()> {
-    let device = get_default_audio_output_device().unwrap();
     let processor = Arc::new(Mutex::new(RmsProcessor::new()));
-    let _stream = capture_device_ouput(&device, processor.clone()).unwrap();
+    const VENDOR_ID: u16 = 0x19F5;
+    const PRODUCT_ID: u16 = 0x3245;
+    const USAGE_PAGE: u16 = 0xFF60;
+    const USAGE: u16 = 0x61;
+
+    let hidapi = HidApi::new()?;
+    let device_info = hidapi
+        .device_list()
+        .find(|info| {
+            info.product_id() == PRODUCT_ID
+                && info.vendor_id() == VENDOR_ID
+                && info.usage() == USAGE
+                && info.usage_page() == USAGE_PAGE
+        })
+        .context("Cannot find keyboard device")?;
+
+    println!(
+        "Opening device:\n VID: {:04x}, PID: {:04x}\n",
+        device_info.vendor_id(),
+        device_info.product_id()
+    );
+
+    let hid_device = device_info.open_device(&hidapi)?;
+
+    let (tx, rx): (Sender<ThreadCommand>, Receiver<ThreadCommand>) = mpsc::channel();
+
+    let device = get_default_audio_output_device().unwrap();
+    let _stream = capture_device_ouput(&device, processor.clone(), tx).unwrap();
+
+    let processor_hid = processor.clone();
+    let raw_hid_handle = std::thread::spawn(move || -> Result<()> {
+        let protocol = Protocol::default();
+        loop {
+            let command = rx.recv().unwrap();
+            match command {
+                ThreadCommand::ProcessorComplete => {
+                    let rms = { processor_hid.lock().unwrap().get_rms::<u8>() };
+                    hid_device.write(&protocol.prepare_rms_data(rms.0, rms.1))?;
+                }
+            };
+        }
+    });
     let mut terminal = setup_terminal().context("setup failed")?;
     run(&mut terminal, processor.clone()).context("app loop failed")?;
     restore_terminal(&mut terminal).context("restore terminal failed")?;
 
     // std::thread::sleep(Duration::from_millis(10000));
+    raw_hid_handle.join().unwrap()?;
     Ok(())
 }
 
