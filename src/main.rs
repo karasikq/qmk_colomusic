@@ -65,7 +65,7 @@ fn main() -> Result<()> {
             let command = rx.recv().unwrap();
             match command {
                 ThreadCommand::ProcessorComplete => {
-                    let rms = { processor_hid.lock().unwrap().get_rms::<u8>() };
+                    let rms = { processor_hid.lock().unwrap().get_rms_u8() };
                     hid_device.write(&protocol.prepare_rms_data(rms.0, rms.1))?;
                 }
             };

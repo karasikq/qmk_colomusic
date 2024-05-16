@@ -136,6 +136,10 @@ impl RmsProcessor {
     {
         (self.rms.0.to_sample::<T>(), self.rms.0.to_sample::<T>())
     }
+
+    pub fn get_rms_u8(&self) -> (u8, u8) {
+        ((self.rms.0 * 255f32) as u8, (self.rms.1 * 255f32) as u8)
+    }
 }
 
 impl Default for RmsProcessor {
