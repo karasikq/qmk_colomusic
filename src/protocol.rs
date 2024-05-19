@@ -112,7 +112,7 @@ impl Protocol {
             return Err(CommandParseError::CorruptedHeader);
         }
 
-        Command::try_from(data)
+        Command::try_from(&data[3..])
     }
 }
 

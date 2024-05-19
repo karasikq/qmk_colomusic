@@ -59,22 +59,30 @@ fn main() -> Result<()> {
     let _stream = capture_device_ouput(&device, processor.clone(), tx).unwrap();
 
     let processor_hid = processor.clone();
-    let raw_hid_handle = std::thread::spawn(move || -> Result<()> {
-        let protocol = Protocol::default();
+    let protocol = Protocol::default();
 
-        let handshake_command = Command::Handshake { status: 0x7F };
-        hid_device.write(&protocol.prepare_command(&handshake_command))?;
-        let mut hid_buffer = [0; PAGE_SIZE];
-        loop {
-            let bytes = hid_device.read(&mut hid_buffer)?;
-            let command = protocol.to_command(&hid_buffer[0..bytes])?;
-            if let Command::Handshake { status } = command {
-                if status == 0xFF {
-                    break;
-                }
+    let handshake_command = Command::Handshake { status: 0x7F };
+    println!("Handshaking with keyboard...");
+    hid_device.write(&protocol.prepare_command(&handshake_command))?;
+    let mut hid_buffer = [0; PAGE_SIZE];
+    loop {
+        let bytes = hid_device.read(&mut hid_buffer)?;
+        println!("Response: {:?}", hid_buffer);
+        let command = protocol.to_command(&hid_buffer[0..bytes])?;
+        if let Command::Handshake { status } = command {
+            if status == 0x80 {
+                let handshake_command = Command::Handshake { status: 0x81 };
+                println!("Received correct status. Sending confirmation...");
+                hid_device.write(&protocol.prepare_command(&handshake_command))?;
+                break;
+            } else {
+                println!("Received wrong value. Re-Handshaking with keyboard...");
+                let handshake_command = Command::Handshake { status: 0x7F };
+                hid_device.write(&protocol.prepare_command(&handshake_command))?;
             }
         }
-
+    }
+    let raw_hid_handle = std::thread::spawn(move || -> Result<()> {
         loop {
             let command = rx.recv().unwrap();
             match command {
