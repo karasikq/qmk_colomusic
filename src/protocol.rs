@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 pub enum ThreadCommand {
     ProcessorComplete,
 }
@@ -9,12 +11,30 @@ pub enum Command {
     RMS { left: u8, right: u8 },
 }
 
+#[derive(Debug)]
 pub enum CommandParseError {
     CommandByteError,
     HandshakeStatusError,
     RMSValueError(u8),
     UndefinedCommand(u8),
 }
+
+impl Display for CommandParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CommandParseError::CommandByteError => write!(f, "Cannot get command byte"),
+            CommandParseError::HandshakeStatusError => write!(f, "Cannot get handshake status"),
+            CommandParseError::RMSValueError(channel) => {
+                write!(f, "Cannot get rms value byte for {} channel", channel)
+            }
+            CommandParseError::UndefinedCommand(byte) => {
+                write!(f, "Undefined command with byte {}", byte)
+            }
+        }
+    }
+}
+
+impl std::error::Error for CommandParseError {}
 
 impl Command {
     pub fn to_data(&self) -> Vec<u8> {

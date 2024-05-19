@@ -20,7 +20,7 @@ use crossterm::{
 use hidapi::HidApi;
 use ratatui::prelude::*;
 
-use crate::protocol::{Protocol, ThreadCommand, Command};
+use crate::protocol::{Command, Protocol, ThreadCommand, PAGE_SIZE};
 
 use self::{
     audio_capture::{capture_device_ouput, get_default_audio_output_device, RmsProcessor},
@@ -61,12 +61,29 @@ fn main() -> Result<()> {
     let processor_hid = processor.clone();
     let raw_hid_handle = std::thread::spawn(move || -> Result<()> {
         let protocol = Protocol::default();
+
+        let handshake_command = Command::Handshake { status: 0x7F };
+        hid_device.write(&protocol.prepare_command(&handshake_command))?;
+        let mut hid_buffer = [0; PAGE_SIZE];
+        loop {
+            let bytes = hid_device.read(&mut hid_buffer)?;
+            let command = Command::try_from(&hid_buffer[0..bytes])?;
+            if let Command::Handshake { status } = command {
+                if status == 0xFF {
+                    break;
+                }
+            }
+        }
+
         loop {
             let command = rx.recv().unwrap();
             match command {
                 ThreadCommand::ProcessorComplete => {
                     let rms = { processor_hid.lock().unwrap().get_rms_u8() };
-                    let command = Command::RMS { left: rms.0, right: rms.1 };
+                    let command = Command::RMS {
+                        left: rms.0,
+                        right: rms.1,
+                    };
                     hid_device.write(&protocol.prepare_command(&command))?;
                 }
             };
