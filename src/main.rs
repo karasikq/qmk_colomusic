@@ -67,7 +67,7 @@ fn main() -> Result<()> {
         let mut hid_buffer = [0; PAGE_SIZE];
         loop {
             let bytes = hid_device.read(&mut hid_buffer)?;
-            let command = Command::try_from(&hid_buffer[0..bytes])?;
+            let command = protocol.to_command(&hid_buffer[0..bytes])?;
             if let Command::Handshake { status } = command {
                 if status == 0xFF {
                     break;

@@ -17,6 +17,7 @@ pub enum CommandParseError {
     HandshakeStatusError,
     RMSValueError(u8),
     UndefinedCommand(u8),
+    CorruptedHeader,
 }
 
 impl Display for CommandParseError {
@@ -29,6 +30,9 @@ impl Display for CommandParseError {
             }
             CommandParseError::UndefinedCommand(byte) => {
                 write!(f, "Undefined command with byte {}", byte)
+            }
+            CommandParseError::CorruptedHeader => {
+                write!(f, "Corrupted header")
             }
         }
     }
@@ -93,6 +97,22 @@ impl Protocol {
             data_chunk[index] = *c;
         }
         data
+    }
+
+    pub fn to_command(&self, data: &[u8]) -> Result<Command, CommandParseError> {
+        let header = &data[0..3];
+        let protocol_header = self.header();
+        let mut is_header_valid = true;
+        for (index, h) in header.iter().enumerate() {
+            if *h != protocol_header[index + 1] {
+                is_header_valid = false;
+            }
+        }
+        if !is_header_valid {
+            return Err(CommandParseError::CorruptedHeader);
+        }
+
+        Command::try_from(data)
     }
 }
 
