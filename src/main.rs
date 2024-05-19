@@ -20,7 +20,7 @@ use crossterm::{
 use hidapi::HidApi;
 use ratatui::prelude::*;
 
-use crate::protocol::{Protocol, ThreadCommand};
+use crate::protocol::{Protocol, ThreadCommand, Command};
 
 use self::{
     audio_capture::{capture_device_ouput, get_default_audio_output_device, RmsProcessor},
@@ -66,7 +66,8 @@ fn main() -> Result<()> {
             match command {
                 ThreadCommand::ProcessorComplete => {
                     let rms = { processor_hid.lock().unwrap().get_rms_u8() };
-                    hid_device.write(&protocol.prepare_rms_data(rms.0, rms.1))?;
+                    let command = Command::RMS { left: rms.0, right: rms.1 };
+                    hid_device.write(&protocol.prepare_command(&command))?;
                 }
             };
         }
