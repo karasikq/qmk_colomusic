@@ -552,18 +552,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nuphy-music"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cpal",
- "crossterm",
- "dasp_sample",
- "hidapi",
- "ratatui",
-]
-
-[[package]]
 name = "oboe"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -643,6 +631,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d1597b0c024618f09a9c3b8655b7e430397a36d23fdafec26d6965e9eec3eba"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "qmk-colormusic"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cpal",
+ "crossterm",
+ "dasp_sample",
+ "hidapi",
+ "ratatui",
 ]
 
 [[package]]

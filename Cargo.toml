@@ -1,5 +1,5 @@
 [package]
-name = "nuphy-music"
+name = "qmk-colormusic"
 version = "0.1.0"
 edition = "2021"
 
