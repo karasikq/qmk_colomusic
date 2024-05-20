@@ -9,6 +9,7 @@ pub const PAGE_SIZE: usize = 33;
 pub enum Command {
     Handshake { status: u8 },
     RMS { left: u8, right: u8 },
+    CustomData { length: u8 },
 }
 
 #[derive(Debug)]
@@ -18,6 +19,7 @@ pub enum CommandParseError {
     RMSValueError(u8),
     UndefinedCommand(u8),
     CorruptedHeader,
+    CustomDataLengthError,
 }
 
 impl Display for CommandParseError {
@@ -34,6 +36,9 @@ impl Display for CommandParseError {
             CommandParseError::CorruptedHeader => {
                 write!(f, "Corrupted header")
             }
+            CommandParseError::CustomDataLengthError => {
+                write!(f, "Cannot get custom data chunk length")
+            }
         }
     }
 }
@@ -45,6 +50,7 @@ impl Command {
         match self {
             Command::Handshake { status } => vec![self.into(), *status],
             Command::RMS { left, right } => vec![self.into(), *left, *right],
+            Command::CustomData { length } => vec![self.into(), *length],
         }
     }
 }
@@ -54,6 +60,7 @@ impl From<&Command> for u8 {
         match val {
             Command::Handshake { .. } => 0x01,
             Command::RMS { .. } => 0x02,
+            Command::CustomData { .. } => 0x03,
         }
     }
 }
@@ -70,6 +77,9 @@ impl TryFrom<&[u8]> for Command {
             0x02 => Ok(Command::RMS {
                 left: *value.get(1).ok_or(Self::Error::RMSValueError(0))?,
                 right: *value.get(2).ok_or(Self::Error::RMSValueError(1))?,
+            }),
+            0x03 => Ok(Command::CustomData {
+                length: *value.get(1).ok_or(Self::Error::CustomDataLengthError)?,
             }),
             _ => Err(CommandParseError::UndefinedCommand(*command_index)),
         }
