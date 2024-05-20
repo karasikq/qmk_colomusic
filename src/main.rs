@@ -58,9 +58,23 @@ fn main() -> Result<()> {
     let device = get_default_audio_output_device().unwrap();
     let _stream = capture_device_ouput(&device, processor.clone(), tx).unwrap();
 
-    let processor_hid = processor.clone();
     let protocol = Protocol::default();
 
+    process_handshake(&hid_device, &protocol)?;
+
+    let processor_hid = processor.clone();
+    let raw_hid_handle = std::thread::spawn(move || -> Result<()> {
+        hid_thread(&hid_device, &protocol, processor_hid, rx)
+    });
+    let mut terminal = setup_terminal().context("setup failed")?;
+    run(&mut terminal, processor.clone()).context("app loop failed")?;
+    restore_terminal(&mut terminal).context("restore terminal failed")?;
+
+    raw_hid_handle.join().unwrap()?;
+    Ok(())
+}
+
+fn process_handshake(hid_device: &hidapi::HidDevice, protocol: &Protocol) -> Result<()> {
     let handshake_command = Command::Handshake { status: 0x7F };
     println!("Handshaking with keyboard...");
     hid_device.write(&protocol.prepare_command(&handshake_command))?;
@@ -74,7 +88,7 @@ fn main() -> Result<()> {
                 let handshake_command = Command::Handshake { status: 0x81 };
                 println!("Received correct status. Sending confirmation...");
                 hid_device.write(&protocol.prepare_command(&handshake_command))?;
-                break;
+                return Ok(());
             } else {
                 println!("Received wrong value. Re-Handshaking with keyboard...");
                 let handshake_command = Command::Handshake { status: 0x7F };
@@ -82,28 +96,27 @@ fn main() -> Result<()> {
             }
         }
     }
-    let raw_hid_handle = std::thread::spawn(move || -> Result<()> {
-        loop {
-            let command = rx.recv().unwrap();
-            match command {
-                ThreadCommand::ProcessorComplete => {
-                    let rms = { processor_hid.lock().unwrap().get_rms_u8() };
-                    let command = Command::RMS {
-                        left: rms.0,
-                        right: rms.1,
-                    };
-                    hid_device.write(&protocol.prepare_command(&command))?;
-                }
-            };
-        }
-    });
-    let mut terminal = setup_terminal().context("setup failed")?;
-    run(&mut terminal, processor.clone()).context("app loop failed")?;
-    restore_terminal(&mut terminal).context("restore terminal failed")?;
+}
 
-    // std::thread::sleep(Duration::from_millis(10000));
-    raw_hid_handle.join().unwrap()?;
-    Ok(())
+fn hid_thread(
+    hid_device: &hidapi::HidDevice,
+    protocol: &Protocol,
+    processor: Arc<Mutex<RmsProcessor>>,
+    rx: Receiver<ThreadCommand>,
+) -> Result<()> {
+    loop {
+        let command = rx.recv().unwrap();
+        match command {
+            ThreadCommand::ProcessorComplete => {
+                let rms = { processor.lock().unwrap().get_rms_u8() };
+                let command = Command::RMS {
+                    left: rms.0,
+                    right: rms.1,
+                };
+                hid_device.write(&protocol.prepare_command(&command))?;
+            }
+        };
+    }
 }
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
